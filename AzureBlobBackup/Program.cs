@@ -35,9 +35,14 @@ namespace AzureBlobBackup
                                                      : CloudConfigurationManager.GetSetting("FileContainer"));
             
             var currentDirectory = new DirectoryInfo(Directory.GetCurrentDirectory());
-            var lastFileModified = currentDirectory.EnumerateFileSystemInfos().Max(x => x.CreationTimeUtc);
+            var fileSystemInfos = currentDirectory.GetFileSystemInfos().ToArray();
+
+            //If we don't have any files, just set that we haven't had any modifications lately, else set to the latest creation time
+            var lastFileModified = fileSystemInfos.Any()
+                                       ? fileSystemInfos.Max(x => x.CreationTimeUtc)
+                                       : DateTime.MinValue;
             
-            Console.WriteLine("Last modified for the directory {0} is {1}", currentDirectory.Name, currentDirectory.LastWriteTimeUtc);
+            Console.WriteLine("Last modified for the directory {0} is {1}", currentDirectory.Name, lastFileModified);
 
             Task.WaitAll(
                 (from blob in container.ListBlobs().OfType<CloudBlockBlob>()
@@ -46,8 +51,6 @@ namespace AzureBlobBackup
                     .ToArray());
 
             Console.WriteLine("Finished downloading all files");
-
-            Console.Read();
         }
     }
 }
