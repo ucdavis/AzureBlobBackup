@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.WindowsAzure;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
+using System.IO;
 
 namespace AzureBlobBackup
 {
@@ -19,15 +20,34 @@ namespace AzureBlobBackup
         {
             Console.WriteLine("Getting Azure Storage Configuration");
 
+            //Get the storage account passed in, otherwise use the one from the settings file
             var storageAccount =
-                CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("StorageConnectionString"));
+                CloudStorageAccount.Parse(args.Length > 0
+                                              ? args[0]
+                                              : CloudConfigurationManager.GetSetting("StorageConnectionString"));
 
             var blobClient = storageAccount.CreateCloudBlobClient();
 
-            var container = blobClient.GetContainerReference(CloudConfigurationManager.GetSetting("FileContainer"));
+            //Get the container to use if passed in as the second arg, else use the one from the settings file
+            var container =
+                blobClient.GetContainerReference(args.Length > 1
+                                                     ? args[1]
+                                                     : CloudConfigurationManager.GetSetting("FileContainer"));
             
+            var currentDirectory = new DirectoryInfo(Directory.GetCurrentDirectory());
+            var lastFileModified = currentDirectory.EnumerateFileSystemInfos().Max(x => x.CreationTimeUtc);
             
-            
+            Console.WriteLine("Last modified for the directory {0} is {1}", currentDirectory.Name, currentDirectory.LastWriteTimeUtc);
+
+            Task.WaitAll(
+                (from blob in container.ListBlobs().OfType<CloudBlockBlob>()
+                 where blob.Properties.LastModified > lastFileModified
+                 select blob.DownloadToFileAsync(blob.Name, FileMode.Create))
+                    .ToArray());
+
+            Console.WriteLine("Finished downloading all files");
+
+            Console.Read();
         }
     }
 }
